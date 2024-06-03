@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 
@@ -11,7 +12,7 @@ import (
 func listAll(db *badger.DB) error {
 	t := table.NewWriter()
 	t.SetOutputMirror(os.Stdout)
-	t.AppendHeader(table.Row{"ID", "Output"})
+	t.AppendHeader(table.Row{"ID", "Command", "Output", "Start Time", "Total Time"})
 	t.SetStyle(table.StyleLight)
 
 	err := db.View(func(txn *badger.Txn) error {
@@ -24,19 +25,24 @@ func listAll(db *badger.DB) error {
 		for it.Rewind(); it.Valid(); it.Next() {
 			item := it.Item()
 			k := item.Key()
-			err := item.Value(func(v []byte) error {
-				if string(k) == "id" {
-					return nil
-				}
-				t.AppendRows([]table.Row{
-					{string(k), string(v)},
-				})
-				//fmt.Printf("key=%s, value=\n%s\n", k, v)
-				return nil
-			})
+			if string(k) == "id" {
+				continue
+			}
+
+			v, err := item.ValueCopy(nil)
 			if err != nil {
 				return err
 			}
+
+			var sc shellCommand
+			err = json.Unmarshal(v, &sc)
+			if err != nil {
+				return err
+			}
+
+			t.AppendRows([]table.Row{
+				{string(k), sc.Command, sc.Output, sc.StartTime, sc.EndTime},
+			})
 		}
 
 		return nil
